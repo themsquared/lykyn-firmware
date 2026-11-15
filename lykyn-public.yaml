@@ -3,7 +3,7 @@ external_components:
   - source:
       type: local
       path: external_components
-    components: [shroom_labs_cloud, lykyn_dashboard]
+    components: [shroom_labs_cloud, lykyn_dashboard, shroom_labs_local_api]
 
 # Public installer build. No secrets inside, safe to host. The web UI and OTA have
 # no password, so this unit trusts everything on your LAN, the same as the stock

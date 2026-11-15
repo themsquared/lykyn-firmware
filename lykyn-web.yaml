@@ -22,6 +22,42 @@ shroom_labs_cloud:
     color_b: light_blue_pct
   grow_phase: stage
 
+
+shroom_labs_local_api:
+  type: lykyn_chamber
+  model: Lykyn
+  firmware: ${device_version}
+  temperature: current_temperature
+  humidity: current_humidity
+  temperature_target: temperature_target
+  temperature_tolerance: temperature_tolerance
+  humidity_target: target_humidity
+  humidity_tolerance: humidity_tolerance
+  stage: stage
+  climate_mode: control_mode
+  sunrise_hour: sunrise_hour
+  light_hours: light_hours
+  light_r: light_red_pct
+  light_g: light_green_pct
+  light_b: light_blue_pct
+  light_white: light_white_pct
+  light_brightness: light_brightness
+  light_enabled: light_enabled
+  light_status: light_status
+  humidifier_switch: humidifier_manual
+  humidifier_level: mist_level
+  humidifier_status: humidifier_status
+  fae_period_min: fan_period_min
+  fae_run_s: fan_run_s
+  fae_speed: fan_speed_pct
+  fae_status: air_exchange_status
+  alerts: active_alerts
+  cloud_id: shl_cloud
+  last_good_ms: last_good_ms
+  fan_boost: fan_boost
+  fan_in_pct: fan_in_level_pct
+  fan_out_pct: fan_out_level_pct
+
 web_server:
   css_include: assets/esphome.css
   js_include: assets/esphome.js

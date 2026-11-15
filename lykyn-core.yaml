@@ -41,6 +41,16 @@ improv_serial:
 captive_portal:
 
 mdns:
+  services:
+    - service: _shroomlabs
+      protocol: _tcp
+      port: 80
+      txt:
+        type: lykyn_chamber
+        model: Lykyn
+        fw: ${device_version}
+        api: "1"
+        path: /api/status
 
 time:
   - platform: sntp
@@ -82,6 +92,9 @@ globals:
   - id: led_test_step
     type: int
     initial_value: '0'
+  - id: led_test_running
+    type: bool
+    initial_value: 'false'
   - id: fan_in_level_pct
     type: float
     initial_value: '0'
@@ -175,6 +188,10 @@ switch:
       sorting_weight: 5
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
+    on_turn_on:
+      - script.execute: apply_light
+    on_turn_off:
+      - script.execute: apply_light
 
 output:
   # Stock uses analogWrite (LEDC, 8-bit) on GPIO3 (inlet) and GPIO1 (outlet).
@@ -201,6 +218,10 @@ light:
     rgb_order: ${led_order}
     rmt_symbols: 48   # C3 has 2 TX channels with 48 symbols each; default 96 takes both
     default_transition_length: 0s
+    # Linear output, like the stock FastLED build. The ESPHome default of 2.8 squares
+    # the percentages away: brightness 60 with white 20 over blue 80 left the white
+    # at under 1 percent of full output, and LED Test at 30 percent was near dark.
+    gamma_correct: 1.0
   # Single status pixel, GPIO2 (stock: one Adafruit NeoPixel, RGB order).
   - platform: esp32_rmt_led_strip
     id: status_pixel
@@ -237,27 +258,46 @@ select:
     on_value:
       then:
         - lambda: |-
-            // Black Oyster (Pleurotus ostreatus). Fruiting band is the stock Lykyn
-            // OysterBlackPearl band (15-21 C, 85-92% RH). Pinning and colonization
-            // follow the shroomlabs.io black-oyster profile.
-            struct S { float t, tt, h, ht; float fan_min, fan_s, fan_pct; float light_h, white, blue, mist; };
-            S p;
-            if (x == "Fruiting")          p = {18, 3, 88.5, 3.5, 10, 40, 50, 12, 20, 80, 75};
-            else if (x == "Pinning")      p = {17, 3, 92.0, 3.0, 12, 35, 40, 12, 20, 80, 75};
-            else if (x == "Colonization") p = {24, 4, 90.0, 4.0, 60, 15, 20, 0, 0, 0, 75};
-            else return;
+            // A linked profile's stage knobs win. Built-in Black Oyster numbers are
+            // used only when no profile is set. Always set red and green so a leftover
+            // color does not stay on. Fan 20 clamps to this chamber's 33 percent floor.
             auto setn = [](number::Number *n, float v) { auto c = n->make_call(); c.set_value(v); c.perform(); };
-            setn(id(temperature_target), p.t);
-            setn(id(temperature_tolerance), p.tt);
-            setn(id(target_humidity), p.h);
-            setn(id(humidity_tolerance), p.ht);
-            setn(id(fan_period_min), p.fan_min);
-            setn(id(fan_run_s), p.fan_s);
-            setn(id(fan_speed_pct), p.fan_pct);
-            setn(id(light_hours), p.light_h);
-            setn(id(light_white_pct), p.white);
-            setn(id(light_blue_pct), p.blue);
-            setn(id(mist_level), p.mist);
+            auto apply = [&](float t, float tt, float h, float ht, float fan_min, float fan_s, float fan_pct,
+                             float light_h, float white, float red, float green, float blue, float mist) {
+              setn(id(temperature_target), t);
+              setn(id(temperature_tolerance), tt);
+              setn(id(target_humidity), h);
+              setn(id(humidity_tolerance), ht);
+              setn(id(fan_period_min), fan_min);
+              setn(id(fan_run_s), fan_s);
+              setn(id(fan_speed_pct), fan_pct);
+              setn(id(light_hours), light_h);
+              setn(id(light_white_pct), white);
+              setn(id(light_red_pct), red);
+              setn(id(light_green_pct), green);
+              setn(id(light_blue_pct), blue);
+              setn(id(mist_level), mist);
+            };
+            esphome::shroom_labs::StageRecipe r;
+            if (id(shl_cloud).stage_recipe(x.c_str(), &r)) {
+              apply(r.temperature_c,
+                    (r.mask & (1u << 2)) ? r.temperature_hysteresis : 4,
+                    r.humidity_percent,
+                    (r.mask & (1u << 3)) ? r.humidity_hysteresis : 4,
+                    r.air_exchange_period_min,
+                    r.air_exchange_run_sec,
+                    r.fan_speed_percent,
+                    r.light_hours,
+                    r.white_percent,
+                    r.red_percent,
+                    r.green_percent,
+                    r.blue_percent,
+                    (r.mask & (1u << 13)) ? r.humidifier_speed_percent : 75);
+              return;
+            }
+            if (x == "Fruiting")          apply(18, 3, 88.5, 3.5, 10, 40, 50, 12, 20, 0, 0, 80, 75);
+            else if (x == "Pinning")      apply(17, 3, 92.0, 3.0, 12, 35, 40, 12, 20, 0, 0, 80, 75);
+            else if (x == "Colonization") apply(24, 4, 90.0, 4.0, 60, 15, 20, 0, 0, 0, 0, 0, 75);
 
 number:
   - platform: template
@@ -400,6 +440,8 @@ number:
     initial_value: 8
     optimistic: true
     restore_value: true
+    on_value:
+      - script.execute: apply_light
   - platform: template
     id: light_hours
     name: "Light Hours"
@@ -413,6 +455,8 @@ number:
     initial_value: 12
     optimistic: true
     restore_value: true
+    on_value:
+      - script.execute: apply_light
   - platform: template
     id: light_brightness
     name: "Light Brightness"
@@ -426,6 +470,8 @@ number:
     initial_value: 60
     optimistic: true
     restore_value: true
+    on_value:
+      - script.execute: apply_light
   - platform: template
     id: light_white_pct
     name: "Light White"
@@ -439,6 +485,8 @@ number:
     initial_value: 20
     optimistic: true
     restore_value: true
+    on_value:
+      - script.execute: apply_light
   - platform: template
     id: light_red_pct
     name: "Light Red"
@@ -452,6 +500,8 @@ number:
     initial_value: 0
     optimistic: true
     restore_value: true
+    on_value:
+      - script.execute: apply_light
   - platform: template
     id: light_green_pct
     name: "Light Green"
@@ -465,6 +515,8 @@ number:
     initial_value: 0
     optimistic: true
     restore_value: true
+    on_value:
+      - script.execute: apply_light
   - platform: template
     id: light_blue_pct
     name: "Light Blue"
@@ -478,6 +530,8 @@ number:
     initial_value: 80
     optimistic: true
     restore_value: true
+    on_value:
+      - script.execute: apply_light
 
 text_sensor:
   - platform: wifi_info
@@ -560,18 +614,51 @@ button:
 
 
 script:
+  - id: apply_light
+    mode: restart
+    then:
+      - lambda: |-
+          if (id(led_test_running)) return;  // LED Test owns the ring until it ends
+          if (!id(light_enabled).state) { id(light_status).publish_state("MANUAL"); return; }
+          auto tm = id(sntp_time).now();
+          if (!tm.is_valid()) return;
+          // Fractional hours are honoured (the page offers quarter hours). The old
+          // int cast turned 0.25 to 0.99 hours into 0 and left the ring dark.
+          const float hf = tm.hour + tm.minute / 60.0f;
+          const float sr = id(sunrise_hour).state;
+          const float dur = id(light_hours).state;
+          const bool on = dur >= 24.0f || (dur > 0.0f && fmodf(hf - sr + 48.0f, 24.0f) < dur);
+          if (on) {
+            const float w = id(light_white_pct).state;
+            auto clamp01 = [](float v) { return v < 0 ? 0.0f : (v > 1 ? 1.0f : v); };
+            auto call = id(grow_light).turn_on();
+            call.set_rgb(clamp01((id(light_red_pct).state + w) / 100.0f),
+                         clamp01((id(light_green_pct).state + w) / 100.0f),
+                         clamp01((id(light_blue_pct).state + w) / 100.0f));
+            call.set_brightness(id(light_brightness).state / 100.0f);
+            call.set_transition_length(0);
+            call.perform();
+          } else {
+            id(grow_light).turn_off().set_transition_length(0).perform();
+          }
+          const std::string st = on ? "ON" : "OFF";
+          if (id(light_status).state != st) id(light_status).publish_state(st);
   - id: led_test
     mode: single
     then:
-      - light.turn_on: {id: grow_light, red: 100%, green: 0%, blue: 0%, brightness: 30%}
+      - lambda: 'id(led_test_running) = true;'
+      - light.turn_on: {id: grow_light, red: 100%, green: 0%, blue: 0%, brightness: 50%, transition_length: 0s}
       - delay: 2s
-      - light.turn_on: {id: grow_light, red: 0%, green: 100%, blue: 0%, brightness: 30%}
+      - light.turn_on: {id: grow_light, red: 0%, green: 100%, blue: 0%, brightness: 50%, transition_length: 0s}
       - delay: 2s
-      - light.turn_on: {id: grow_light, red: 0%, green: 0%, blue: 100%, brightness: 30%}
+      - light.turn_on: {id: grow_light, red: 0%, green: 0%, blue: 100%, brightness: 50%, transition_length: 0s}
       - delay: 2s
-      - light.turn_on: {id: grow_light, red: 100%, green: 100%, blue: 100%, brightness: 30%}
+      - light.turn_on: {id: grow_light, red: 100%, green: 100%, blue: 100%, brightness: 50%, transition_length: 0s}
       - delay: 2s
-      - light.turn_off: grow_light
+      - light.turn_off: {id: grow_light, transition_length: 0s}
+      - lambda: 'id(led_test_running) = false;'
+      # Put the ring back to what the schedule says.
+      - script.execute: apply_light
 
 interval:
   # Climate loop, once a second. Runs locally, no cloud needed.
@@ -652,31 +739,11 @@ interval:
           pub(id(active_alerts), alerts.empty() ? "none" : alerts);
 
   # Grow light schedule. Turn off "Light Enabled" to drive the ring by hand.
+  # The ring is also redrawn the moment a light number or the switch changes,
+  # so a change from the device page shows up at once instead of within 20 s.
   - interval: 20s
     then:
-      - lambda: |-
-          if (!id(light_enabled).state) { id(light_status).publish_state("MANUAL"); return; }
-          auto tm = id(sntp_time).now();
-          if (!tm.is_valid()) return;
-          const int h = tm.hour;
-          const int sr = (int) id(sunrise_hour).state;
-          const int dur = (int) id(light_hours).state;
-          const bool on = dur >= 24 || (dur > 0 && ((h - sr + 24) % 24) < dur);
-          if (on) {
-            const float w = id(light_white_pct).state;
-            auto clamp01 = [](float v) { return v < 0 ? 0.0f : (v > 1 ? 1.0f : v); };
-            auto call = id(grow_light).turn_on();
-            call.set_rgb(clamp01((id(light_red_pct).state + w) / 100.0f),
-                         clamp01((id(light_green_pct).state + w) / 100.0f),
-                         clamp01((id(light_blue_pct).state + w) / 100.0f));
-            call.set_brightness(id(light_brightness).state / 100.0f);
-            call.set_transition_length(0);
-            call.perform();
-          } else {
-            id(grow_light).turn_off().set_transition_length(0).perform();
-          }
-          const std::string st = on ? "ON" : "OFF";
-          if (id(light_status).state != st) id(light_status).publish_state(st);
+      - script.execute: apply_light
 
   # Status pixel: green ok, amber no wifi, red no sensor.
   - interval: 3s

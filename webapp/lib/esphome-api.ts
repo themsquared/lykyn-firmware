@@ -1,3 +1,4 @@
+import { writeTaken } from './light-state'
 import { aliasEntityMap, aliasEvent, NUMBER_DEVICE_IDS, restPath } from './ids'
 
 export interface SensorData {
@@ -19,6 +20,8 @@ export interface DeviceState {
 
 class ESPHomeAPI {
   private baseUrl: string
+  // HTTP status of the last write (0 when the chamber could not be reached). Shown in error messages.
+  lastWriteStatus = 0
 
   constructor() {
     // When running on the device, API is at root
@@ -64,11 +67,28 @@ class ESPHomeAPI {
       const response = await fetch(`${this.baseUrl}${restPath('number', numberId)}/set?value=${value}`, {
         method: 'POST',
       })
+      this.lastWriteStatus = response.status
       return response.ok
     } catch (error) {
       console.error(`Failed to set number ${numberId}:`, error)
+      this.lastWriteStatus = 0
       return false
     }
+  }
+
+  // The chamber answers 200 even when it ignores a number that is out of range,
+  // so read the number back and compare before calling the write good.
+  async setNumberChecked(
+    numberId: string,
+    value: number
+  ): Promise<{ ok: boolean; actual?: number; reason?: 'rejected' | 'ignored' }> {
+    const sent = await this.setNumber(numberId, value)
+    if (!sent) return { ok: false, reason: 'rejected' }
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    const back = await this.getNumber(numberId)
+    const actual = back ? Number(back.value) : NaN
+    if (!Number.isFinite(actual)) return { ok: true }
+    return writeTaken(value, actual) ? { ok: true, actual } : { ok: false, actual, reason: 'ignored' }
   }
 
   async setSwitch(switchId: string, state: boolean): Promise<boolean> {
@@ -77,9 +97,11 @@ class ESPHomeAPI {
       const response = await fetch(`${this.baseUrl}${restPath('switch', switchId)}/${action}`, {
         method: 'POST',
       })
+      this.lastWriteStatus = response.status
       return response.ok
     } catch (error) {
       console.error(`Failed to set switch ${switchId}:`, error)
+      this.lastWriteStatus = 0
       return false
     }
   }
@@ -178,9 +200,11 @@ class ESPHomeAPI {
       const response = await fetch(`${this.baseUrl}${restPath('button', buttonId)}/press`, {
         method: 'POST',
       })
+      this.lastWriteStatus = response.status
       return response.ok
     } catch (error) {
       console.error(`Failed to press button ${buttonId}:`, error)
+      this.lastWriteStatus = 0
       return false
     }
   }
@@ -201,9 +225,11 @@ class ESPHomeAPI {
       const response = await fetch(`${this.baseUrl}${restPath('select', selectId)}/set?option=${encodeURIComponent(value)}`, {
         method: 'POST',
       })
+      this.lastWriteStatus = response.status
       return response.ok
     } catch (error) {
       console.error(`Failed to set select ${selectId}:`, error)
+      this.lastWriteStatus = 0
       return false
     }
   }
