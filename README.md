@@ -34,9 +34,28 @@ cp secrets.example.yaml secrets.yaml   # edit it, never commit it
 `secrets.yaml` and every compiled image from the private builds are git ignored. Compiled images embed the
 passwords from `secrets.yaml`.
 
+## Local discovery and status
+
+The chamber advertises `_shroomlabs._tcp` on port 80 so in-network tools can find it.
+`GET /api/status` is a shared, read-only JSON document (schema version 1). It is open on the
+LAN even on the passworded builds, and it does not include secrets, Wi-Fi credentials, or a MAC
+address. The same contract is used on Shrooly. See `docs/local-api.md`.
+
+```
+avahi-browse -r _shroomlabs._tcp
+curl -sS http://lykyn.local/api/status
+curl -sS http://lykyn.local/api/status/schema
+```
+
+Host tests for the JSON builder:
+
+```
+python3 scripts/test_shroom_labs_local_api.py
+```
+
 ## LAN API
 
-Basic auth on the private builds. Examples:
+The ESPHome entity REST API can still read and write individual knobs. Basic auth on the private builds. Examples:
 
 ```
 curl -u shroom:PASSWORD http://lykyn.local/text_sensor/Status%20JSON

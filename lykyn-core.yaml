@@ -41,6 +41,16 @@ improv_serial:
 captive_portal:
 
 mdns:
+  services:
+    - service: _shroomlabs
+      protocol: _tcp
+      port: 80
+      txt:
+        type: lykyn_chamber
+        model: Lykyn
+        fw: ${device_version}
+        api: "1"
+        path: /api/status
 
 time:
   - platform: sntp
