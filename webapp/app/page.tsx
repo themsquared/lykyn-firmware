@@ -1582,7 +1582,7 @@ export default function Dashboard() {
                 <label>Fan Speed: {getNumber('air_exchange__speed')}%</label>
                 <input
                   type="range"
-                  min="33"
+                  min="0"
                   max="100"
                   step="1"
                   value={getNumber('air_exchange__speed') as number}

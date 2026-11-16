@@ -21,7 +21,7 @@ test("picking a stage writes the recipe knobs, and Custom does not", () => {
   assert.equal(by.light_hours, 0)
   assert.equal(by.light_white, 0)
   assert.equal(by.light_green, 0)
-  assert.equal(by.air_exchange_fan_speed, 33, "profile 20 clamps to the Lykyn fan minimum")
+  assert.equal(by.air_exchange_fan_speed, 20)
   assert.equal(by.air_exchange_every, 60)
   assert.equal("grow_day" in by, false)
   assert.deepEqual(adapter.stageWrites("Custom"), [{ kind: "select", id: "stage", value: "Custom" }])
@@ -40,7 +40,7 @@ test("a linked profile's stage knobs beat the built-in recipe", () => {
 })
 
 test("the fan floor and white unit are this chamber's own", () => {
-  assert.equal(adapter.FAN_MIN_PERCENT, 33)
+  assert.equal(adapter.FAN_MIN_PERCENT, 0)
   assert.equal(adapter.WHITE_UNIT, "%")
   assert.equal(adapter.whiteDisplay("20.24"), 20.2)
   assert.equal(adapter.whiteDisplay(2.3), 2.3)

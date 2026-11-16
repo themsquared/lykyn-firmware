@@ -18,7 +18,7 @@ const PRESETS_ON_DEVICE = true
 const WHITE_UNIT = "%"
 
 /** The fan never runs below 33 percent. */
-const FAN_MIN_PERCENT = 33
+const FAN_MIN_PERCENT = 0
 
 function nativeStage(stage) {
   return NATIVE_STAGE[stage] || null
@@ -32,7 +32,7 @@ function stageWrites(stage, profileStages) {
   if (stage === "Custom") return writes
   const r = recipeFromProfile(stage, profileStages) || RECIPES[stage]
   if (!r) return writes
-  const fan = Math.max(r.fanSpeed, FAN_MIN_PERCENT)
+  const fan = Math.max(0, Math.min(100, r.fanSpeed))
   writes.push(
     { kind: "number", id: "temperature_target", value: r.temperature },
     { kind: "number", id: "target_humidity", value: r.humidity },

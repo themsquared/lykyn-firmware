@@ -98,6 +98,12 @@ globals:
   - id: hum_demand
     type: bool
     initial_value: 'false'
+  # Set true after the first good humidity sample in SMART. Demand starts false
+  # in RAM, so without this a reboot with RH already in the hysteresis dead
+  # zone (below target, still at or above target minus tolerance) never arms.
+  - id: hum_ready
+    type: bool
+    initial_value: 'false'
   - id: hum_on_run_s
     type: int
     initial_value: '0'
@@ -361,7 +367,7 @@ number:
     min_value: 1
     max_value: 15
     step: 0.5
-    initial_value: 3.5
+    initial_value: 2.0
     optimistic: true
     restore_value: true
   - platform: template
@@ -436,7 +442,7 @@ number:
       sorting_group_id: grp_air
       sorting_weight: 40
     unit_of_measurement: "%"
-    min_value: 33
+    min_value: 0
     max_value: 100
     step: 1
     initial_value: 50
@@ -715,15 +721,23 @@ interval:
           const float tt = id(temperature_target).state, ttol = id(temperature_tolerance).state;
           const float tmin = tt - ttol, tmax = tt + ttol;
           const float HARD_RH = 95.0f;   // absolute stop, whatever the setpoints say
+          // Unmeasured stall floor. Stock firmware's first of four levels was 33%.
+          // 0 is always off. Values above 0 are lifted to this duty until we measure the real floor.
+          const float FAN_STALL_DUTY = 0.33f;
           bool want_hum = false;
           float fan_in = 0.0f, fan_out = 0.0f;
           std::string alerts;
 
           if (!fresh) {
             alerts = "sensor";
-            if (smart || manual) { fan_in = 0.33f; fan_out = 0.33f; }  // keep some air moving
+            if (smart || manual) { fan_in = FAN_STALL_DUTY; fan_out = FAN_STALL_DUTY; }  // keep some air moving
             id(hum_demand) = false;
+            id(hum_ready) = false;
           } else if (smart) {
+            if (!id(hum_ready)) {
+              id(hum_ready) = true;
+              if (rh < hum_t) id(hum_demand) = true;
+            }
             if (rh < hmin) id(hum_demand) = true;
             else if (rh >= hum_t) id(hum_demand) = false;
             want_hum = id(hum_demand);
@@ -733,14 +747,16 @@ interval:
             if (rh > hmax || t > tmax) id(fan_boost) = true;
             else if (rh < hmax - 1.0f && t < tmax - 0.5f) id(fan_boost) = false;
             float level = id(fan_boost) ? 1.0f : (run ? id(fan_speed_pct).state / 100.0f : 0.0f);
+            // Same stall lift as MANUAL: a running SMART fan below 33% does not spin.
+            if (level > 0.0f && level < FAN_STALL_DUTY) level = FAN_STALL_DUTY;
             fan_in = fan_out = level;
             if (level > 0.0f && rh >= hmin) want_hum = false;   // do not mist against the exchange fans
           } else if (manual) {
             want_hum = id(manual_hum);
             fan_in = id(manual_fan_in).state / 100.0f;
             fan_out = id(manual_fan_out).state / 100.0f;
-            if (fan_in > 0.0f && fan_in < 0.33f) fan_in = 0.33f;
-            if (fan_out > 0.0f && fan_out < 0.33f) fan_out = 0.33f;
+            if (fan_in > 0.0f && fan_in < FAN_STALL_DUTY) fan_in = FAN_STALL_DUTY;
+            if (fan_out > 0.0f && fan_out < FAN_STALL_DUTY) fan_out = FAN_STALL_DUTY;
           } else {
             id(hum_demand) = false;
           }
