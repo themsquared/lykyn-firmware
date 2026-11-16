@@ -17,7 +17,7 @@ const GROW_PRESETS = [
     phase: "Fruiting",
     day: 1,
     total: 10,
-    setpoints: { humidity: 88.5, temperature: 18, sunrise: 8, lightHours: 12, white: 20, red: 0, green: 0, blue: 80, mist: 75 },
+    setpoints: { humidity: 88.5, temperature: 18, sunrise: 8, lightHours: 12, white: 23, red: 0, green: 0, blue: 80, mist: 75 },
   },
   {
     id: "pinning",
@@ -25,7 +25,7 @@ const GROW_PRESETS = [
     phase: "Pinning",
     day: 1,
     total: 5,
-    setpoints: { humidity: 92, temperature: 17, sunrise: 8, lightHours: 12, white: 20, red: 0, green: 0, blue: 80, mist: 75 },
+    setpoints: { humidity: 92, temperature: 17, sunrise: 8, lightHours: 12, white: 23, red: 0, green: 0, blue: 80, mist: 75 },
   },
 ]
 

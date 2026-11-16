@@ -23,6 +23,33 @@ esphome:
           // Fans and mister start OFF. The controller turns them on once it has a good reading.
           id(fan_in_pwm).set_level(0.0f);
           id(fan_out_pwm).set_level(0.0f);
+      - lambda: |-
+          // One time move to the shared light scale: every light percent is a share of the
+          // ring's full output (100 = full), so the master brightness is 100. An older image
+          // stored the mix under a master brightness (default 60) and drove each channel at
+          // value x brightness / 100. Scale the stored mix by that factor so the ring puts out
+          // exactly the light it did before. The stage presets already ran at boot in the new
+          // scale, so white and blue are only scaled on the Custom stage.
+          if (id(light_scale_v1)) return;
+          id(light_scale_v1) = true;
+          const float master = id(light_brightness).state;
+          if (!(master > 0.0f) || master >= 100.0f) return;
+          const float k = master / 100.0f;
+          const bool custom = std::string(id(stage).current_option()) == "Custom";
+          auto scale = [k](number::Number *n) {
+            auto c = n->make_call();
+            c.set_value(roundf(n->state * k * 10.0f) / 10.0f);
+            c.perform();
+          };
+          scale(id(light_red_pct));
+          scale(id(light_green_pct));
+          if (custom) {
+            scale(id(light_white_pct));
+            scale(id(light_blue_pct));
+          }
+          auto b = id(light_brightness).make_call();
+          b.set_value(100.0f);
+          b.perform();
 
 esp32:
   variant: esp32c3
@@ -104,6 +131,12 @@ globals:
   - id: last_status_rgb
     type: int
     initial_value: '-1'
+  # Set once the light mix has been moved to the shared scale, where 100 percent is the full
+  # ring at full output. Older images stored the mix under a master brightness of 60.
+  - id: light_scale_v1
+    type: bool
+    restore_value: true
+    initial_value: 'false'
 
 sensor:
   - platform: sht3xd
@@ -221,6 +254,8 @@ light:
     # Linear output, like the stock FastLED build. The ESPHome default of 2.8 squares
     # the percentages away: brightness 60 with white 20 over blue 80 left the white
     # at under 1 percent of full output, and LED Test at 30 percent was near dark.
+    # Linear plus a master brightness of 100 is what makes a light percent honest:
+    # 100 is the full ring, 50 is half the output.
     gamma_correct: 1.0
   # Single status pixel, GPIO2 (stock: one Adafruit NeoPixel, RGB order).
   - platform: esp32_rmt_led_strip
@@ -261,6 +296,9 @@ select:
             // A linked profile's stage knobs win. Built-in Black Oyster numbers are
             // used only when no profile is set. Always set red and green so a leftover
             // color does not stay on. Fan 20 clamps to this chamber's 33 percent floor.
+            // Built-in fallback light follows the shroomlabs.io black-oyster profile: 92 lux of white
+            // and blue 80. White is 23 percent of the full ring on an ESTIMATE of 400 lux at 100
+            // percent (not measured), the same number the site sends. Replace when real readings exist.
             auto setn = [](number::Number *n, float v) { auto c = n->make_call(); c.set_value(v); c.perform(); };
             auto apply = [&](float t, float tt, float h, float ht, float fan_min, float fan_s, float fan_pct,
                              float light_h, float white, float red, float green, float blue, float mist) {
@@ -295,8 +333,8 @@ select:
                     (r.mask & (1u << 13)) ? r.humidifier_speed_percent : 75);
               return;
             }
-            if (x == "Fruiting")          apply(18, 3, 88.5, 3.5, 10, 40, 50, 12, 20, 0, 0, 80, 75);
-            else if (x == "Pinning")      apply(17, 3, 92.0, 3.0, 12, 35, 40, 12, 20, 0, 0, 80, 75);
+            if (x == "Fruiting")          apply(18, 3, 88.5, 3.5, 10, 40, 50, 12, 23, 0, 0, 80, 75);
+            else if (x == "Pinning")      apply(17, 3, 92.0, 3.0, 12, 35, 40, 12, 23, 0, 0, 80, 75);
             else if (x == "Colonization") apply(24, 4, 90.0, 4.0, 60, 15, 20, 0, 0, 0, 0, 0, 75);
 
 number:
@@ -467,7 +505,7 @@ number:
     min_value: 0
     max_value: 100
     step: 5
-    initial_value: 60
+    initial_value: 100
     optimistic: true
     restore_value: true
     on_value:
@@ -481,8 +519,8 @@ number:
     unit_of_measurement: "%"
     min_value: 0
     max_value: 100
-    step: 1
-    initial_value: 20
+    step: 0.1
+    initial_value: 23
     optimistic: true
     restore_value: true
     on_value:
@@ -496,7 +534,7 @@ number:
     unit_of_measurement: "%"
     min_value: 0
     max_value: 100
-    step: 1
+    step: 0.1
     initial_value: 0
     optimistic: true
     restore_value: true
@@ -511,7 +549,7 @@ number:
     unit_of_measurement: "%"
     min_value: 0
     max_value: 100
-    step: 1
+    step: 0.1
     initial_value: 0
     optimistic: true
     restore_value: true
@@ -526,7 +564,7 @@ number:
     unit_of_measurement: "%"
     min_value: 0
     max_value: 100
-    step: 1
+    step: 0.1
     initial_value: 80
     optimistic: true
     restore_value: true

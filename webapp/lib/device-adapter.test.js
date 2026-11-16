@@ -42,7 +42,9 @@ test("a linked profile's stage knobs beat the built-in recipe", () => {
 test("the fan floor and white unit are this chamber's own", () => {
   assert.equal(adapter.FAN_MIN_PERCENT, 33)
   assert.equal(adapter.WHITE_UNIT, "%")
-  assert.equal(adapter.whiteDisplay("20.2"), 20)
+  assert.equal(adapter.whiteDisplay("20.24"), 20.2)
+  assert.equal(adapter.whiteDisplay(2.3), 2.3)
+  assert.equal(adapter.whiteDisplay(100), 100)
 })
 
 test("the current stage is read back through the canonical name", () => {

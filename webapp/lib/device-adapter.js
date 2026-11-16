@@ -14,7 +14,7 @@ const STAGES_AVAILABLE = ["Colonization", "Pinning", "Fruiting", "Custom"]
 /** The firmware also loads a recipe when the stage select changes. The page writes the same knobs so a second pick of the current stage still applies, and so a linked profile can override the built-in numbers. */
 const PRESETS_ON_DEVICE = true
 
-/** White is a 0-100 percent channel added on top of the colors. */
+/** White is a 0-100 percent channel added on top of the colors. 100 is the full ring at full output. */
 const WHITE_UNIT = "%"
 
 /** The fan never runs below 33 percent. */
@@ -54,9 +54,9 @@ function currentStage(nativeName) {
   return canonicalStage(nativeName)
 }
 
-/** White as the chamber counts it, for the Light card. */
+/** White for the Light card: percent of the ring's full output, one decimal. */
 function whiteDisplay(raw) {
-  return Math.round(Number(raw) || 0)
+  return Math.round((Number(raw) || 0) * 10) / 10
 }
 
 module.exports = { STAGES_AVAILABLE, PRESETS_ON_DEVICE, WHITE_UNIT, FAN_MIN_PERCENT, nativeStage, stageWrites, currentStage, whiteDisplay }

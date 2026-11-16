@@ -22,7 +22,7 @@ import FirstRun from './components/FirstRun'
 import CloudSettings from './components/CloudSettings'
 import { DEMO_ENTITIES, DEMO_STAGES } from './demo-entities'
 import type { EntityState } from './entity-types'
-import { STAGES_AVAILABLE, WHITE_UNIT, currentStage, stageWrites } from '../lib/device-adapter'
+import { STAGES_AVAILABLE, WHITE_UNIT, currentStage, stageWrites, whiteDisplay } from '../lib/device-adapter'
 import { CARDS } from '../lib/stage-standard'
 
 /** Card names come from the standard, so every chamber says the same words. */
@@ -606,7 +606,7 @@ export default function Dashboard() {
   }
 
   const handleLuxChange = (sliderValue: number) => {
-    const white = Math.max(0, Math.min(100, Math.round(sliderValue)))
+    const white = Math.max(0, Math.min(100, Math.round(sliderValue * 10) / 10))
     setLuxValue(white)
     handleNumberChange('number-white_led_intensity', white)
     if (white > 0 && !(lightDuration > 0)) {
@@ -1059,7 +1059,7 @@ export default function Dashboard() {
           <div className="card-icon"><Icon name={lightsOn ? 'sun' : 'moon'} /></div>
           <div className="card-label">{CARD_LABEL.light}</div>
           <div className="card-value">
-            {lightsOn ? getNumber('white_led_intensity') : 'OFF'}
+            {lightsOn ? whiteDisplay(getNumber('white_led_intensity')) : 'OFF'}
             {lightsOn && <span className="card-unit">{WHITE_UNIT}</span>}
           </div>
           <div className="card-schedule">
@@ -1736,12 +1736,12 @@ export default function Dashboard() {
                   type="range"
                   min="0"
                   max="100"
-                  step="1"
+                  step="0.1"
                   value={luxValue}
                   onChange={(e) => handleLuxChange(parseFloat(e.target.value))}
                 />
                 <div className="lux-guide">
-                  White and color levels mix on the grow ring. Keep white modest; oyster fruiting usually wants more blue than white.
+                  White and color levels are percent of the ring's full output, and they mix on the grow ring. Keep white modest; oyster fruiting usually wants more blue than white.
                 </div>
               </div>
               <div className="color-picker-row">

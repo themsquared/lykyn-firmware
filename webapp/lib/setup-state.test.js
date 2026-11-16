@@ -119,7 +119,7 @@ test("writes become the same entity ids the dashboard already listens to", () =>
 test("fruiting presets write duration and a complete mix", () => {
   const oyster = applyPresetWrites(GROW_PRESETS.find((p) => p.id === "oyster-fruit"));
   assert.equal(oyster.find((w) => w.id === "light_hours").value, 12);
-  assert.equal(oyster.find((w) => w.id === "light_white").value, 20);
+  assert.equal(oyster.find((w) => w.id === "light_white").value, 23);
   assert.equal(oyster.find((w) => w.id === "light_blue").value, 80);
   assert.equal(oyster.find((w) => w.id === "mist_level").value, 75);
 });
