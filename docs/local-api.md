@@ -146,7 +146,7 @@ the shape.
 - `detail`: mechanism only. Coach and Muse should not need it. Includes model,
   firmware, uptime, per-fan levels, fan boost, humidifier/mister state, climate
   mode, coach link flags, wifi RSSI, and (on Shrooly) raw `white_lux`.
-- `health`: `sensor_stale`, `wifi_connected`, and `errors` (an array of strings).
+- `health`: `sensor_stale`, `wifi_connected`, and `errors` (an array of strings). On Lykyn, `errors` can contain `water_low`: humidity did not rise while the mister ran, so the tank may be empty (inferred, there is no tank sensor). See `WATER.md`.
 
 ## Grow identity
 

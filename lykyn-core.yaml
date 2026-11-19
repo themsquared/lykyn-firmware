@@ -13,6 +13,8 @@ esphome:
   name: ${name}
   friendly_name: ${friendly_name}
   min_version: 2026.10.0
+  includes:
+    - include/water_inference.h
   project:
     name: shroomlabs.lykyn
     version: ${device_version}
@@ -23,6 +25,9 @@ esphome:
           // Fans and mister start OFF. The controller turns them on once it has a good reading.
           id(fan_in_pwm).set_level(0.0f);
           id(fan_out_pwm).set_level(0.0f);
+      - lambda: |-
+          // A chamber that was held off for a dry tank stays held off across a reboot until a probe passes.
+          esphome::lykyn::water_inference().restore_suspect(id(water_suspect_saved));
       - lambda: |-
           // One time move to the shared light scale: every light percent is a share of the
           // ring's full output (100 = full), so the master brightness is 100. An older image
@@ -92,6 +97,12 @@ i2c:
   frequency: 100kHz
 
 globals:
+  # The tank looked empty and the mister was held off. Saved so a power cycle does not send
+  # the mister back to dry running. Written only when the verdict changes.
+  - id: water_suspect_saved
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
   - id: last_good_ms
     type: uint32_t
     initial_value: '0'
@@ -629,6 +640,23 @@ text_sensor:
     web_server:
       sorting_group_id: grp_lights
       sorting_weight: 15
+  # ok, suspect or unknown. There is no tank sensor: suspect means humidity did not rise while the
+  # mister ran, so the tank may be empty or the mister blocked. See docs/WATER.md.
+  - platform: template
+    id: water_state_text
+    name: "Water State"
+    web_server:
+      sorting_group_id: grp_hidden
+      sorting_weight: 11
+  # Always "inferred" on this hardware. The cloud uses it to word the alert honestly.
+  - platform: template
+    id: water_source_text
+    name: "Water Source"
+    lambda: 'return {std::string("inferred")};'
+    update_interval: 60s
+    web_server:
+      sorting_group_id: grp_hidden
+      sorting_weight: 12
   - platform: template
     id: active_alerts
     name: "Active Alerts"
@@ -648,6 +676,15 @@ button:
       sorting_group_id: grp_system
       sorting_weight: 100
     entity_category: config
+  # After adding water. If the mister was held off as suspect, this probes it right away.
+  - platform: template
+    name: "Water Refilled"
+    icon: mdi:water-plus
+    web_server:
+      sorting_group_id: grp_humidity
+      sorting_weight: 16
+    on_press:
+      - lambda: 'esphome::lykyn::water_inference().refilled();'
   - platform: template
     name: "LED Test"
     web_server:
@@ -770,6 +807,11 @@ interval:
             if (t > tmax) alerts += "temp_high,";
           }
 
+          // Dry tank guard. When humidity has not risen across two windows of real mist, the mister is held
+          // off, apart from a short probe every 30 minutes, because a dry ultrasonic disc is damaged by running.
+          auto &water = esphome::lykyn::water_inference();
+          if (!water.allow_mist()) want_hum = false;
+
           // Mister safety: at most 120 s of demand, then 30 s rest (stock does the same).
           if (id(hum_rest_s) > 0) { want_hum = false; id(hum_rest_s)--; }
           else if (want_hum) {
@@ -781,6 +823,15 @@ interval:
           const int on_s = (int) ceilf(10.0f * id(mist_level).state / 100.0f);
           const bool pulse = want_hum && id(mist_tick) < on_s;
           if (pulse != id(mister_relay).state) { if (pulse) id(mister_relay).turn_on(); else id(mister_relay).turn_off(); }
+
+          // Feed the tank inference what really happened this second.
+          water.tick(fresh, rh, pulse, fan_in > 0.0f || fan_out > 0.0f);
+          if (water.suspect()) alerts += "water_low,";
+          if (id(water_suspect_saved) != water.suspect()) id(water_suspect_saved) = water.suspect();
+          {
+            const char *wv = esphome::lykyn::water_verdict_name(water.verdict());
+            if (id(water_state_text).state != wv) id(water_state_text).publish_state(wv);
+          }
 
           id(fan_in_pwm).set_level(fan_in);
           id(fan_out_pwm).set_level(fan_out);
